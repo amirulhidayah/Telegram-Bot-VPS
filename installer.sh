@@ -385,9 +385,21 @@ fi
 
 FILES="$STATUS"
 
+# Sementara matikan file monitor supaya tidak spam notifikasi
+# saat file di-revert
+if systemctl is-active --quiet file-monitor 2>/dev/null; then
+  systemctl stop file-monitor
+  FILE_MONITOR_RESTORE=1
+fi
+
 git restore --staged .
 git restore .
 git clean -fd
+
+# Hidupkan kembali file monitor
+if [ "${FILE_MONITOR_RESTORE:-0}" = "1" ]; then
+  systemctl start file-monitor
+fi
 
 cat <<EOF
 ✅ Perubahan berhasil dibatalkan.
