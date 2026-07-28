@@ -148,7 +148,6 @@ ok "WATCH_PATH: $WATCH_PATH"
 # ─── Git Safe Directory ──────────────────────────────────────────────────────
 log "Mengatur git safe.directory untuk WATCH_PATH..."
 if [ -d "$WATCH_PATH/.git" ]; then
-  # Pastikan root bisa akses repo milik user lain
   if ! git config --global --get-all safe.directory | grep -q "^${WATCH_PATH}$"; then
     git config --global --add safe.directory "$WATCH_PATH"
     ok "safe.directory ditambahkan: $WATCH_PATH"
@@ -158,6 +157,44 @@ if [ -d "$WATCH_PATH/.git" ]; then
 fi
 
 echo ""
+echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║         PILIH FITUR YANG AKTIF             ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}Atur fitur yang mau diaktifkan (Y/n):${NC}"
+echo ""
+
+fitur_default() {
+  local prompt="$1"
+  local default="$2"
+  local desc="$3"
+  local yn
+  if [ "$default" = "y" ]; then
+    read -p "$(echo -e "${CYAN}${prompt}${NC} [Y/n]: ")" yn
+    yn="${yn:-Y}"
+  else
+    read -p "$(echo -e "${CYAN}${prompt}${NC} [y/N]: ")" yn
+    yn="${yn:-N}"
+  fi
+  if [[ "$yn" == "Y" || "$yn" == "y" ]]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+SSH_LOGIN_ENABLED=$(fitur_default "SSH Login (berhasil)" "y" "Kirim notifikasi saat ada user berhasil login SSH")
+SSH_LOGOUT_ENABLED=$(fitur_default "SSH Logout" "y" "Kirim notifikasi saat user logout dari SSH")
+SSH_FAILED_LOGIN_ENABLED=$(fitur_default "SSH Failed Login (gagal)" "n" "Kirim notifikasi saat ada percobaan login SSH gagal — AKTIFKAN hanya jika ingin filter IP mencurigakan")
+SUDO_ENABLED=$(fitur_default "Sudo Command" "y" "Kirim notifikasi setiap ada yang pakai sudo beserta commandnya")
+FILE_MONITOR_ENABLED=$(fitur_default "File Monitor (realtime)" "y" "Pantau perubahan file di WATCH_PATH via inotify — notifikasi langsung ke Telegram")
+AUTO_REPORT_ENABLED=$(fitur_default "Auto Report (3 jam)" "y" "Kirim laporan status VPS otomatis setiap 3 jam via systemd timer")
+STATUS_ENABLED=$(fitur_default "Command /status" "y" "Izinkan perintah /status — jika tidak perlu, nonaktifkan")
+CHECKFILE_ENABLED=$(fitur_default "Command /checkfile" "y" "Izinkan perintah /checkfile — lihat perubahan file via git status")
+DISCARD_ENABLED=$(fitur_default "Command /discardchanges" "y" "Izinkan perintah /discardchanges — revert perubahan file")
+
+echo ""
+ok "Semua fitur dikonfigurasi"
 
 # ─── Create Directory Structure ──────────────────────────────────────────────
 echo ""
@@ -187,6 +224,17 @@ IGNORE_REGEX="(^|/)(vendor|node_modules|storage/logs|storage/framework|bootstrap
 # ========== AUTH MONITOR ==========
 SSH_PORT=22
 AUTH_LOG="/var/log/auth.log"
+
+# ========== FEATURE TOGGLES ==========
+SSH_LOGIN_ENABLED=__SSH_LOGIN_ENABLED__
+SSH_LOGOUT_ENABLED=__SSH_LOGOUT_ENABLED__
+SSH_FAILED_LOGIN_ENABLED=__SSH_FAILED_LOGIN_ENABLED__
+SUDO_ENABLED=__SUDO_ENABLED__
+FILE_MONITOR_ENABLED=__FILE_MONITOR_ENABLED__
+AUTO_REPORT_ENABLED=__AUTO_REPORT_ENABLED__
+STATUS_ENABLED=__STATUS_ENABLED__
+CHECKFILE_ENABLED=__CHECKFILE_ENABLED__
+DISCARD_ENABLED=__DISCARD_ENABLED__
 CONFIGEOF
 
 # Replace placeholders
@@ -194,6 +242,15 @@ sed -i "s|__BOT_TOKEN__|$BOT_TOKEN|g" "$BASE/config.sh"
 sed -i "s|__CHAT_ID__|$CHAT_ID|g" "$BASE/config.sh"
 sed -i "s|__CHECK_URL__|$CHECK_URL|g" "$BASE/config.sh"
 sed -i "s|__WATCH_PATH__|$WATCH_PATH|g" "$BASE/config.sh"
+sed -i "s|__SSH_LOGIN_ENABLED__|$SSH_LOGIN_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__SSH_LOGOUT_ENABLED__|$SSH_LOGOUT_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__SSH_FAILED_LOGIN_ENABLED__|$SSH_FAILED_LOGIN_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__SUDO_ENABLED__|$SUDO_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__FILE_MONITOR_ENABLED__|$FILE_MONITOR_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__AUTO_REPORT_ENABLED__|$AUTO_REPORT_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__STATUS_ENABLED__|$STATUS_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__CHECKFILE_ENABLED__|$CHECKFILE_ENABLED|g" "$BASE/config.sh"
+sed -i "s|__DISCARD_ENABLED__|$DISCARD_ENABLED|g" "$BASE/config.sh"
 
 chmod +x "$BASE/config.sh"
 ok "config.sh ditulis"
@@ -503,28 +560,50 @@ do
         continue
       fi
 
+      # Bangun help message dinamis berdasarkan fitur yang aktif
+      build_help() {
+        local MSG="🤖 *VPS Monitor Bot*\n\nSelamat datang! Saya akan memantau VPS kamu 24/7\\.\n"
+        MSG+="\n📋 *Perintah Tersedia:*\n"
+        local HAS_CMD=0
+        if [ "$STATUS_ENABLED" = "true" ]; then
+          MSG+="/status — Cek status VPS lengkap\n"
+          HAS_CMD=1
+        fi
+        if [ "$CHECKFILE_ENABLED" = "true" ]; then
+          MSG+="/checkfile — Cek perubahan file di folder project\n"
+          HAS_CMD=1
+        fi
+        if [ "$DISCARD_ENABLED" = "true" ]; then
+          MSG+="/discardchanges — Batalkan perubahan file\n"
+          HAS_CMD=1
+        fi
+        if [ "$HAS_CMD" = "0" ]; then
+          MSG+="_Tidak ada perintah yang diaktifkan_\n"
+        fi
+        MSG+="\n👁️ *Fitur Otomatis:*\n"
+        if [ "$FILE_MONITOR_ENABLED" = "true" ]; then
+          MSG+="• File monitor — notifikasi realtime saat ada file berubah\n"
+        fi
+        if [ "$SSH_LOGIN_ENABLED" = "true" ] || [ "$SSH_LOGOUT_ENABLED" = "true" ] || [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] || [ "$SUDO_ENABLED" = "true" ]; then
+          MSG+="• Auth monitor — "
+          local ITEMS=""
+          [ "$SSH_LOGIN_ENABLED" = "true" ] && ITEMS+="login, "
+          [ "$SSH_LOGOUT_ENABLED" = "true" ] && ITEMS+="logout, "
+          [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] && ITEMS+="failed login, "
+          [ "$SUDO_ENABLED" = "true" ] && ITEMS+="sudo"
+          MSG+=$(echo "$ITEMS" | sed 's/,\ $//')
+          MSG+="\n"
+        fi
+        if [ "$AUTO_REPORT_ENABLED" = "true" ]; then
+          MSG+="• Laporan otomatis — status VPS setiap 3 jam\n"
+        fi
+        MSG+="\n__VPS Monitor Bot__ — _Bash \\- based_"
+        echo -e "$MSG"
+      }
+
       case "$TEXT" in
         "/start"|"/help")
-          MESSAGE="🤖 *VPS Monitor Bot*
-
-Selamat datang\\! Saya akan memantau VPS kamu 24/7\\.
-
-📋 *Perintah Tersedia:*
-
-/status — Cek status VPS lengkap
-/checkfile — Cek perubahan file di folder project
-/discardchanges — Batalkan perubahan file
-
-👁️ *Fitur Otomatis:*
-• File monitor — notifikasi realtime saat ada file berubah
-• Auth monitor — notifikasi SSH login/logout, failed login, sudo
-• Laporan otomatis — status VPS setiap 3 jam
-
-🔧 *Manajemen:*
-\`systemctl status telegram-bot\`
-\`journalctl -u telegram-bot -f\`
-
-__VPS Monitor Bot__ — _Bash \\- based_"
+          MESSAGE=$(build_help)
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
             --data-urlencode text="$MESSAGE" \
@@ -532,6 +611,9 @@ __VPS Monitor Bot__ — _Bash \\- based_"
             > /dev/null
           ;;
         "/status")
+          if [ "$STATUS_ENABLED" != "true" ]; then
+            continue
+          fi
           MESSAGE=$("$BASE_DIR/script/status.sh")
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -539,6 +621,9 @@ __VPS Monitor Bot__ — _Bash \\- based_"
             > /dev/null
           ;;
         "/checkfile")
+          if [ "$CHECKFILE_ENABLED" != "true" ]; then
+            continue
+          fi
           MESSAGE=$("$BASE_DIR/script/check-file.sh")
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -546,6 +631,9 @@ __VPS Monitor Bot__ — _Bash \\- based_"
             > /dev/null
           ;;
         "/discardchanges")
+          if [ "$DISCARD_ENABLED" != "true" ]; then
+            continue
+          fi
           MESSAGE=$("$BASE_DIR/script/discard-changes.sh")
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -692,7 +780,7 @@ do
   DATE=$(date +"%d-%m-%Y %H:%M:%S WITA")
 
   # ─── SSH Login ───
-  if echo "$LINE" | grep -qE 'sshd.*Accepted (password|publickey) for .* from '; then
+  if [ "$SSH_LOGIN_ENABLED" = "true" ] && echo "$LINE" | grep -qE 'sshd.*Accepted (password|publickey) for .* from '; then
     USER=$(echo "$LINE" | sed -n 's/.*for \([^]*\) from.*/\1/p')
     FROM=$(echo "$LINE" | sed -n 's/.*from \([^]*\) port.*/\1/p')
     PORT=$(echo "$LINE" | sed -n 's/.*port \([0-9]*\).*/\1/p')
@@ -712,7 +800,7 @@ Port    : $PORT
   fi
 
   # ─── Failed Login ───
-  if echo "$LINE" | grep -qE 'sshd.*Failed password for .* from '; then
+  if [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] && echo "$LINE" | grep -qE 'sshd.*Failed password for .* from '; then
     USER=$(echo "$LINE" | sed -n 's/.*for \([^]*\) from.*/\1/p')
     FROM=$(echo "$LINE" | sed -n 's/.*from \([^]*\) port.*/\1/p')
     PORT=$(echo "$LINE" | sed -n 's/.*port \([0-9]*\).*/\1/p')
@@ -732,7 +820,7 @@ Port    : $PORT
   fi
 
   # ─── Logout SSH ───
-  if echo "$LINE" | grep -qE 'sshd.*session closed for user '; then
+  if [ "$SSH_LOGOUT_ENABLED" = "true" ] && echo "$LINE" | grep -qE 'sshd.*session closed for user '; then
     USER=$(echo "$LINE" | sed -n 's/.*for user \([^]*\).*/\1/p')
     KEY="logout:$USER"
     NOW=$(date +%s)
@@ -748,7 +836,7 @@ User    : $USER
   fi
 
   # ─── Sudo Command ───
-  if echo "$LINE" | grep -qE 'sudo:.*COMMAND='; then
+  if [ "$SUDO_ENABLED" = "true" ] && echo "$LINE" | grep -qE 'sudo:.*COMMAND='; then
     USER=$(echo "$LINE" | sed -n 's/.*sudo: \([^]*\).*/\1/p')
     CMD=$(echo "$LINE" | sed -n 's/.*COMMAND=//p')
     # Skip sudo commands from auth-monitor itself to avoid loops
@@ -795,9 +883,9 @@ echo ""
 
 echo -e "${YELLOW}Service yang akan diinstall:${NC}"
 echo "  1) telegram-bot.service   — Bot Telegram (long polling)"
-echo "  2) telegram-report.timer  — Laporan otomatis setiap 3 jam"
-echo "  3) file-monitor.service   — Realtime file monitor (inotify)"
-echo "  4) auth-monitor.service   — Realtime login & activity monitor"
+echo "  2) auth-monitor.service   — Realtime login & activity monitor"
+[ "$AUTO_REPORT_ENABLED" = "true" ] && echo "  3) telegram-report.timer  — Laporan otomatis setiap 3 jam"
+[ "$FILE_MONITOR_ENABLED" = "true" ] && echo "  4) file-monitor.service   — Realtime file monitor (inotify)"
 echo ""
 
 read -p "$(echo -e "${YELLOW}Install dan jalankan service sekarang? [Y/n]${NC} ")" inst_svc
@@ -819,26 +907,34 @@ if [[ "$inst_svc" == "Y" || "$inst_svc" == "y" ]]; then
   fi
 
   # ── Timer Report ──
-  log "Menginstall telegram-report.timer..."
-  cp "$BASE/services/telegram-report.service" /etc/systemd/system/
-  cp "$BASE/services/telegram-report.timer" /etc/systemd/system/
-  systemctl daemon-reload
-  systemctl enable telegram-report.timer
-  systemctl start telegram-report.timer
-  if systemctl is-active --quiet telegram-report.timer; then
-    ok "telegram-report.timer aktif"
+  if [ "$AUTO_REPORT_ENABLED" = "true" ]; then
+    log "Menginstall telegram-report.timer..."
+    cp "$BASE/services/telegram-report.service" /etc/systemd/system/
+    cp "$BASE/services/telegram-report.timer" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable telegram-report.timer
+    systemctl start telegram-report.timer
+    if systemctl is-active --quiet telegram-report.timer; then
+      ok "telegram-report.timer aktif"
+    fi
+  else
+    log "telegram-report.timer tidak diinstall (fitur nonaktif)"
   fi
 
   # ── File Monitor ──
-  log "Menginstall file-monitor.service..."
-  cp "$BASE/services/file-monitor.service" /etc/systemd/system/
-  systemctl daemon-reload
-  systemctl enable file-monitor
-  systemctl start file-monitor
-  if systemctl is-active --quiet file-monitor; then
-    ok "file-monitor.service aktif"
+  if [ "$FILE_MONITOR_ENABLED" = "true" ]; then
+    log "Menginstall file-monitor.service..."
+    cp "$BASE/services/file-monitor.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable file-monitor
+    systemctl start file-monitor
+    if systemctl is-active --quiet file-monitor; then
+      ok "file-monitor.service aktif"
+    else
+      warn "file-monitor.service gagal start — pastikan inotify-tools terinstall & WATCH_PATH valid"
+    fi
   else
-    warn "file-monitor.service gagal start — pastikan inotify-tools terinstall & WATCH_PATH valid"
+    log "file-monitor.service tidak diinstall (fitur nonaktif)"
   fi
 
   # ── Auth Monitor ──
@@ -862,9 +958,9 @@ else
   echo "  sudo cp $BASE/services/*.timer /etc/systemd/system/"
   echo "  sudo systemctl daemon-reload"
   echo "  sudo systemctl enable --now telegram-bot"
-  echo "  sudo systemctl enable --now file-monitor"
+  [ "$FILE_MONITOR_ENABLED" = "true" ] && echo "  sudo systemctl enable --now file-monitor"
   echo "  sudo systemctl enable --now auth-monitor"
-  echo "  sudo systemctl enable --now telegram-report.timer"
+  [ "$AUTO_REPORT_ENABLED" = "true" ] && echo "  sudo systemctl enable --now telegram-report.timer"
   echo ""
   warn "Kamu bisa menjalankan bot secara manual:"
   echo "  cd $BASE && ./bot.sh"
@@ -878,12 +974,10 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 echo -e "  ${CYAN}Lokasi instalasi:${NC}  $BASE"
 echo ""
-echo -e "  ${BOLD}Command Telegram yang tersedia:${NC}"
-echo "    /start            — Pesan selamat datang & info bot"
-echo "    /help             — Daftar perintah & fitur (sama seperti /start)"
-echo "    /status           — Cek status VPS"
-echo "    /checkfile        — Cek perubahan file"
-echo "    /discardchanges   — Batalkan perubahan file"
+echo -e "  ${BOLD}Command Telegram:${NC}"
+[ "$STATUS_ENABLED" = "true" ] && echo "    /status           — Cek status VPS"
+[ "$CHECKFILE_ENABLED" = "true" ] && echo "    /checkfile        — Cek perubahan file"
+[ "$DISCARD_ENABLED" = "true" ] && echo "    /discardchanges   — Batalkan perubahan file"
 echo ""
 echo -e "  ${BOLD}Management:${NC}"
 echo "    systemctl status telegram-bot         — Cek status bot"

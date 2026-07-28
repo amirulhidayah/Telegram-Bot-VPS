@@ -92,7 +92,29 @@ Installer akan meminta input interaktif:
 3. **CHECK_URL** — URL website yang mau dimonitor statusnya
 4. **WATCH_PATH** — path folder project yang mau dipantau perubahannya
 
-### 4. Verifikasi
+### 4. Pilih fitur yang aktif
+
+Setelah konfigurasi, installer akan menampilkan daftar fitur yang bisa di-toggle:
+
+```
+╔══════════════════════════════════════════════╗
+║         PILIH FITUR YANG AKTIF             ║
+╚══════════════════════════════════════════════╝
+
+SSH Login (berhasil) [Y/n]: y
+SSH Logout [Y/n]: y
+SSH Failed Login [y/N]: n    ← nonaktif default (hindari spam bruteforce)
+Sudo Command [Y/n]: y
+File Monitor (realtime) [Y/n]: y
+Auto Report (3 jam) [Y/n]: y
+Command /status [Y/n]: y
+Command /checkfile [Y/n]: y
+Command /discardchanges [Y/n]: y
+```
+
+Default **Y** untuk fitur yang aman, default **n** untuk failed login yang rawan spam.
+
+### 5. Verifikasi
 
 Cek Telegram kamu, akan ada pesan:
 
@@ -100,7 +122,7 @@ Cek Telegram kamu, akan ada pesan:
 ✅ VPS Monitor Bot berhasil diinstall!
 ```
 
-Kemudian kirim `/status` ke bot untuk cek hasilnya.
+Kemudian kirim `/start` atau `/help` untuk melihat daftar perintah sesuai fitur yang kamu aktifkan.
 
 ---
 
@@ -291,12 +313,33 @@ REPORT_INTERVAL=10800    # 3 jam
 # File monitor
 WATCH_PATH="/var/www/html/project"
 IGNORE_REGEX="(^|/)(vendor|node_modules|storage/logs|storage/framework|bootstrap/cache|\.git)(/|$)"
+
+# Feature Toggles (true/false)
+SSH_LOGIN_ENABLED=true
+SSH_LOGOUT_ENABLED=true
+SSH_FAILED_LOGIN_ENABLED=false    # default off — rawan spam bruteforce
+SUDO_ENABLED=true
+FILE_MONITOR_ENABLED=true
+AUTO_REPORT_ENABLED=true
+STATUS_ENABLED=true
+CHECKFILE_ENABLED=true
+DISCARD_ENABLED=true
 ```
 
-Setelah mengubah config, restart service:
+Setelah mengubah config, restart service yang terpengaruh:
 
 ```bash
-systemctl restart telegram-bot
+# Ubah auth monitor
+sudo systemctl restart auth-monitor
+
+# Ubah file monitor
+sudo systemctl restart file-monitor
+
+# Ubah timer report
+sudo systemctl restart telegram-report.timer
+
+# Ubah bot commands
+sudo systemctl restart telegram-bot
 ```
 
 ---
