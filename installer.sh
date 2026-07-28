@@ -145,6 +145,18 @@ while [ -z "$WATCH_PATH" ]; do
 done
 ok "WATCH_PATH: $WATCH_PATH"
 
+# ─── Git Safe Directory ──────────────────────────────────────────────────────
+log "Mengatur git safe.directory untuk WATCH_PATH..."
+if [ -d "$WATCH_PATH/.git" ]; then
+  # Pastikan root bisa akses repo milik user lain
+  if ! git config --global --get-all safe.directory | grep -q "^${WATCH_PATH}$"; then
+    git config --global --add safe.directory "$WATCH_PATH"
+    ok "safe.directory ditambahkan: $WATCH_PATH"
+  else
+    ok "safe.directory sudah terkonfigurasi"
+  fi
+fi
+
 echo ""
 
 # ─── Create Directory Structure ──────────────────────────────────────────────
