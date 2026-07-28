@@ -1,6 +1,6 @@
 # 📟 VPS Monitor Bot
 
-Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring file, keamanan SSH, dan laporan otomatis via Telegram.
+Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring file, keamanan SSH, aktivitas user, dan laporan otomatis via Telegram.
 
 > **Dibuat dengan Bash murni** — zero dependencies dari package registry. Cuma butuh 5 paket Linux standar.
 
@@ -10,31 +10,35 @@ Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring fi
 
 ### 🤖 Telegram Commands
 
-| Perintah | Fungsi |
-|---|---|
-| `/status` | Cek status VPS lengkap: CPU, RAM, Disk, Docker, Uptime + status website |
-| `/checkfile` | Cek perubahan file di folder project (via git status, hormati `.gitignore`) |
-| `/discardchanges` | Batalkan semua perubahan file (git restore + git clean) |
+| Perintah | Trigger | Fungsi | Read/Write |
+|---|---|---|---|
+| `/status` | Manual | Cek status VPS lengkap: website (HTTP code + time), CPU, RAM, Disk, Docker (running/stopped), uptime, hostname | 🔍 Read |
+| `/checkfile` | Manual | Cek perubahan file di folder project (via `git status`, hormati `.gitignore`) | 🔍 Read |
+| `/discardchanges` | Manual | Batalkan semua perubahan file — `git restore` + `git clean -fd` | ⚡ Write |
+| — | Otomatis (inotify) | Notifikasi realtime setiap ada file create/modify/delete/move | 🔍 Read |
+| — | Otomatis (auth.log) | Notifikasi realtime SSH login/logout, failed login, sudo command | 🔍 Read |
+| — | Otomatis (timer) | Laporan status VPS setiap 3 jam | 🔍 Read |
 
 ### 🖥️ Monitoring Sistem (`/status`)
+- **Website Check** — HTTP status code + response time
 - **CPU Usage** — persentase pemakaian realtime
 - **RAM Usage** — used/total + persentase
 - **Disk Usage** — used/total + persentase
 - **Docker Status** — daftar container running 🟢 dan stopped 🔴
-- **Website Check** — HTTP status code + response time
+- **Uptime** — lama VPS menyala
 
 ### 👁️ Realtime File Monitor (inotify)
 - Deteksi event: `create`, `modify`, `delete`, `moved_to`, `moved_from`
-- Auto-ignore: folder via `IGNORE_REGEX` (vendor, node_modules, dll.)
-- **Auto-ignore `.gitignore`** — file yang ada di `.gitignore` tidak dikirim notifikasinya
+- Auto-ignore folder via `IGNORE_REGEX` (vendor, node_modules, storage/logs, dll.)
+- **Auto-ignore `.gitignore`** — file yang masuk `.gitignore` tidak dikirim notifikasinya
 - Notifikasi langsung ke Telegram setiap ada perubahan file
 
 ### 🔐 Auth Monitor (realtime)
-- ✅ SSH login berhasil — user, IP, port
-- 🚫 SSH login gagal — user, IP, port
-- 🚪 SSH logout — user
-- 🛡️ Sudo command — user + command
-- Debounce 30 detik anti-spam
+- ✅ **SSH login berhasil** — user, IP, port
+- 🚫 **SSH login gagal** — user, IP, port (failed password)
+- 🚪 **SSH logout** — user
+- 🛡️ **Sudo command** — user + command yang dijalankan
+- Debounce 30 detik anti-spam per IP/user
 
 ### 📊 Laporan Otomatis
 - Status VPS dikirim otomatis setiap **3 jam** via systemd timer
@@ -113,10 +117,116 @@ systemctl status auth-monitor
 # Cek jadwal laporan
 systemctl list-timers
 
-# Lihat log
+# Lihat log realtime
 journalctl -u telegram-bot -f
 journalctl -u file-monitor -f
 journalctl -u auth-monitor -f
+```
+
+---
+
+## 👀 Pantau Aktivitas User di VPS Secara Realtime
+
+Auth monitor bot hanya mengirim notifikasi untuk event **SSH login/logout, failed login, dan sudo**. Tapi kalau kamu ingin **melihat langsung apa yang sedang dilakukan user yang login**, kamu juga bisa pakai command-command Linux bawaan berikut via terminal:
+
+### Siapa yang sedang login sekarang?
+
+```bash
+# User yang sedang login + sejak kapan + dari mana
+w
+
+# Versi lebih ringkas
+who
+who -u        # tampilkan juga idle time
+```
+
+Contoh output `w`:
+```
+ 21:35:19 up 3 days,  2:15,  2 users,  load average: 0.08, 0.03, 0.01
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+ubuntu   pts/0    103.45.67.89     21:30    2.00s  0.08s  0.01s nano index.php
+root     pts/1    103.45.67.89     21:32    1:05   0.05s  0.05s htop
+```
+
+Dari situ kamu bisa lihat:
+- **User ubuntu** login dari IP `103.45.67.89`, sedang edit `index.php` pakai nano
+- **User root** login dari IP yang sama, sedang jalanin `htop`
+
+### Riwayat login
+
+```bash
+# 10 login terakhir (termasuk yang gagal)
+last -10
+
+# Login gagal saja
+lastb -10
+
+# User yang sudah logout
+last | head -20
+```
+
+### Semua user yang aktif (termasuk non-SSH)
+
+```bash
+# Semua session login (tty, pts, dll)
+loginctl list-sessions
+
+# Detail session tertentu
+loginctl session-status <session-id>
+```
+
+### Proses yang sedang berjalan
+
+```bash
+# Semua proses, realtime (interaktif)
+htop
+
+# Format non-interactive — update tiap 2 detik
+watch -n 2 'ps aux --sort=-%cpu | head -20'
+```
+
+### Network — koneksi aktif
+
+```bash
+# Listening port + koneksi aktif
+ss -tulpn
+
+# Koneksi yang sudah established (berguna untuk lihat SSH dari IP mana aja)
+ss -tnp state established
+
+# Semua koneksi SSH aktif
+ss -tnp | grep :22
+```
+
+### Log aktivitas secara realtime
+
+```bash
+# Semua login/logout SSH secara live (sama seperti yang dikirim bot)
+journalctl -u sshd -f --no-hostname
+
+# Filter hanya yang sukses login
+journalctl -u sshd -f --no-hostname -g "Accepted"
+
+# Semua sudo command secara live
+journalctl -f -t sudo
+
+# Auth log langsung
+tail -f /var/log/auth.log
+```
+
+### Dashboard realtime (gabungan)
+
+Kalau mau lihat semuanya sekaligus, buka terminal terpisah dan jalankan:
+
+```bash
+# Di terminal 1 — pantau SSH login/logout langsung
+journalctl -u sshd -f --no-hostname -o short-iso
+
+# Di terminal 2 — pantau sudo command
+journalctl -f -t sudo
+
+# Di terminal 3 — lihat siapa yang online
+watch -n 5 'echo "=== USER LOGIN ===" && w && echo "" && echo "=== SSH CONNECTIONS ===" && ss -tnp state established'
 ```
 
 ---
@@ -195,6 +305,7 @@ systemctl restart telegram-bot
 - Semua script dijalankan sebagai root (perlu akses system)
 - Auth monitor memiliki **debounce 30 detik** untuk mencegah spam notifikasi
 - File monitor memiliki **dua lapis filter**: `IGNORE_REGEX` + `git check-ignore` (`.gitignore`)
+- Git **safe.directory** otomatis dikonfigurasi supaya bot (root) bisa akses repo milik user lain
 
 ---
 
@@ -203,5 +314,6 @@ systemctl restart telegram-bot
 - **Timezone:** WITA (Asia/Makassar) — bisa diubah di setiap script
 - **Git:** Fitur `/checkfile` dan `/discardchanges` butuh folder project yang sudah di-*init* sebagai git repository lokal. `watch-file.sh` juga hormati `.gitignore`
 - **Docker:** Status docker otomatis muncul walau cuma 1 container
-- **Auth.log:** Auth monitor butuh file `/var/log/auth.log` (standarnya ada di Debian/Ubuntu, di CentOS mungkin di `/var/log/secure`)
-- **Update bot:** Untuk update, clone ulang repo dan jalankan installer lagi — konfigurasi lama tetap aman karena ditimpa saat instalasi ulang
+- **Auth.log:** Auth monitor butuh file `/var/log/auth.log` (standarnya Ubuntu/Debian, di CentOS mungkin `/var/log/secure`)
+- **Update bot:** `git pull origin main` lalu `sudo bash installer.sh` lagi — konfigurasi lama tetap aman
+- **Safe.directory:** Bot otomatis daftarkan WATCH_PATH ke `safe.directory` supaya root bisa akses repo milik user lain tanpa error
