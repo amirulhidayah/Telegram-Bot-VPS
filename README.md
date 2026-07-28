@@ -13,7 +13,7 @@ Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring fi
 | Perintah | Fungsi |
 |---|---|
 | `/status` | Cek status VPS lengkap: CPU, RAM, Disk, Docker, Uptime + status website |
-| `/checkfile` | Cek perubahan file di folder project (via git status) |
+| `/checkfile` | Cek perubahan file di folder project (via git status, hormati `.gitignore`) |
 | `/discardchanges` | Batalkan semua perubahan file (git restore + git clean) |
 
 ### 🖥️ Monitoring Sistem (`/status`)
@@ -25,7 +25,8 @@ Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring fi
 
 ### 👁️ Realtime File Monitor (inotify)
 - Deteksi event: `create`, `modify`, `delete`, `moved_to`, `moved_from`
-- Auto-ignore: `vendor/`, `node_modules/`, `storage/logs/`, `.git/`, dll.
+- Auto-ignore: folder via `IGNORE_REGEX` (vendor, node_modules, dll.)
+- **Auto-ignore `.gitignore`** — file yang ada di `.gitignore` tidak dikirim notifikasinya
 - Notifikasi langsung ke Telegram setiap ada perubahan file
 
 ### 🔐 Auth Monitor (realtime)
@@ -57,24 +58,17 @@ Installer akan menginstall otomatis jika belum ada:
 | `jq` | Parse JSON response Telegram |
 | `bc` | Kalkulasi persentase CPU |
 | `inotify-tools` | Realtime file monitoring |
-| `git` | File change detection + discard |
+| `git` | File change detection + discard + .gitignore filter |
 
 ---
 
 ## 🚀 Cara Install
 
-### 1. Upload script ke VPS
+### 1. Clone repo di VPS
 
 ```bash
-# Upload dari local ke VPS (jalankan di komputer kamu)
-scp installer.sh root@IP_VPS:~/installer.sh
-```
-
-Atau download langsung di VPS:
-
-```bash
-# (nanti kalau sudah di GitHub/public)
-wget -O installer.sh https://...
+git clone https://github.com/amirulhidayah/Telegram-Bot-VPS.git
+cd Telegram-Bot-VPS
 ```
 
 ### 2. Jalankan installer
@@ -129,9 +123,8 @@ journalctl -u auth-monitor -f
 
 ## 🗑️ Uninstall
 
-Jalankan script `uninstaller.sh` yang sudah disiapkan:
-
 ```bash
+cd Telegram-Bot-VPS
 sudo bash uninstaller.sh
 ```
 
@@ -201,13 +194,14 @@ systemctl restart telegram-bot
 - Bot hanya merespon **satu CHAT_ID** yang dikonfigurasi — chat lain diabaikan
 - Semua script dijalankan sebagai root (perlu akses system)
 - Auth monitor memiliki **debounce 30 detik** untuk mencegah spam notifikasi
-- File monitor memiliki **ignore list** untuk folder yang tidak perlu dipantau
+- File monitor memiliki **dua lapis filter**: `IGNORE_REGEX` + `git check-ignore` (`.gitignore`)
 
 ---
 
 ## 📝 Catatan
 
 - **Timezone:** WITA (Asia/Makassar) — bisa diubah di setiap script
-- **Git:** Fitur `/checkfile` dan `/discardchanges` butuh folder project yang sudah di-*init* sebagai git repository lokal
+- **Git:** Fitur `/checkfile` dan `/discardchanges` butuh folder project yang sudah di-*init* sebagai git repository lokal. `watch-file.sh` juga hormati `.gitignore`
 - **Docker:** Status docker otomatis muncul walau cuma 1 container
 - **Auth.log:** Auth monitor butuh file `/var/log/auth.log` (standarnya ada di Debian/Ubuntu, di CentOS mungkin di `/var/log/secure`)
+- **Update bot:** Untuk update, clone ulang repo dan jalankan installer lagi — konfigurasi lama tetap aman karena ditimpa saat instalasi ulang

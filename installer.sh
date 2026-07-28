@@ -420,6 +420,12 @@ do
     continue
   fi
 
+  # Skip file yang ada di .gitignore
+  REL="${FULL#$WATCH_PATH/}"
+  if git -C "$WATCH_PATH" check-ignore "$REL" &>/dev/null; then
+    continue
+  fi
+
   MESSAGE="🚨 FILE SYSTEM ALERT
 
 Event :
