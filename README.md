@@ -12,6 +12,8 @@ Bot Telegram untuk memantau VPS secara realtime — status sistem, monitoring fi
 
 | Perintah | Trigger | Fungsi | Read/Write |
 |---|---|---|---|
+| `/start` | Manual | Pesan selamat datang & info bot | 🔍 Read |
+| `/help` | Manual | Daftar semua perintah & fitur (sama seperti /start) | 🔍 Read |
 | `/status` | Manual | Cek status VPS lengkap: website (HTTP code + time), CPU, RAM, Disk, Docker (running/stopped), uptime, hostname | 🔍 Read |
 | `/checkfile` | Manual | Cek perubahan file di folder project (via `git status`, hormati `.gitignore`) | 🔍 Read |
 | `/discardchanges` | Manual | Batalkan semua perubahan file — `git restore` + `git clean -fd` | ⚡ Write |

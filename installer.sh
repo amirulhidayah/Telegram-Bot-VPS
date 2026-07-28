@@ -504,6 +504,33 @@ do
       fi
 
       case "$TEXT" in
+        "/start"|"/help")
+          MESSAGE="🤖 *VPS Monitor Bot*
+
+Selamat datang\\! Saya akan memantau VPS kamu 24/7\\.
+
+📋 *Perintah Tersedia:*
+
+/status — Cek status VPS lengkap
+/checkfile — Cek perubahan file di folder project
+/discardchanges — Batalkan perubahan file
+
+👁️ *Fitur Otomatis:*
+• File monitor — notifikasi realtime saat ada file berubah
+• Auth monitor — notifikasi SSH login/logout, failed login, sudo
+• Laporan otomatis — status VPS setiap 3 jam
+
+🔧 *Manajemen:*
+\`systemctl status telegram-bot\`
+\`journalctl -u telegram-bot -f\`
+
+__VPS Monitor Bot__ — _Bash \\- based_"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            --data-urlencode text="$MESSAGE" \
+            --data-urlencode parse_mode="MarkdownV2" \
+            > /dev/null
+          ;;
         "/status")
           MESSAGE=$("$BASE_DIR/script/status.sh")
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
@@ -852,6 +879,8 @@ echo ""
 echo -e "  ${CYAN}Lokasi instalasi:${NC}  $BASE"
 echo ""
 echo -e "  ${BOLD}Command Telegram yang tersedia:${NC}"
+echo "    /start            — Pesan selamat datang & info bot"
+echo "    /help             — Daftar perintah & fitur (sama seperti /start)"
 echo "    /status           — Cek status VPS"
 echo "    /checkfile        — Cek perubahan file"
 echo "    /discardchanges   — Batalkan perubahan file"
