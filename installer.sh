@@ -562,44 +562,43 @@ do
 
       # Bangun help message dinamis berdasarkan fitur yang aktif
       build_help() {
-        local MSG="🤖 *VPS Monitor Bot*\n\nSelamat datang! Saya akan memantau VPS kamu 24/7\\.\n"
-        MSG+="\n📋 *Perintah Tersedia:*\n"
-        local HAS_CMD=0
-        if [ "$STATUS_ENABLED" = "true" ]; then
-          MSG+="/status — Cek status VPS lengkap\n"
-          HAS_CMD=1
-        fi
-        if [ "$CHECKFILE_ENABLED" = "true" ]; then
-          MSG+="/checkfile — Cek perubahan file di folder project\n"
-          HAS_CMD=1
-        fi
-        if [ "$DISCARD_ENABLED" = "true" ]; then
-          MSG+="/discardchanges — Batalkan perubahan file\n"
-          HAS_CMD=1
-        fi
-        if [ "$HAS_CMD" = "0" ]; then
-          MSG+="_Tidak ada perintah yang diaktifkan_\n"
-        fi
-        MSG+="\n👁️ *Fitur Otomatis:*\n"
-        if [ "$FILE_MONITOR_ENABLED" = "true" ]; then
-          MSG+="• File monitor — notifikasi realtime saat ada file berubah\n"
-        fi
-        if [ "$SSH_LOGIN_ENABLED" = "true" ] || [ "$SSH_LOGOUT_ENABLED" = "true" ] || [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] || [ "$SUDO_ENABLED" = "true" ]; then
-          MSG+="• Auth monitor — "
-          local ITEMS=""
-          [ "$SSH_LOGIN_ENABLED" = "true" ] && ITEMS+="login, "
-          [ "$SSH_LOGOUT_ENABLED" = "true" ] && ITEMS+="logout, "
-          [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] && ITEMS+="failed login, "
-          [ "$SUDO_ENABLED" = "true" ] && ITEMS+="sudo"
-          MSG+=$(echo "$ITEMS" | sed 's/,\ $//')
-          MSG+="\n"
-        fi
-        if [ "$AUTO_REPORT_ENABLED" = "true" ]; then
-          MSG+="• Laporan otomatis — status VPS setiap 3 jam\n"
-        fi
-        MSG+="\n__VPS Monitor Bot__ — _Bash \\- based_"
-        echo -e "$MSG"
-      }
+              local MSG="<b>🤖 VPS Monitor Bot</b>\n\nSelamat datang! Saya akan memantau VPS kamu 24/7.\n"
+              MSG+="\n<b>📋 Perintah Tersedia:</b>\n"
+              local HAS_CMD=0
+              if [ "$STATUS_ENABLED" = "true" ]; then
+                MSG+="/status — Cek status VPS lengkap\n"
+                HAS_CMD=1
+              fi
+              if [ "$CHECKFILE_ENABLED" = "true" ]; then
+                MSG+="/checkfile — Cek perubahan file di folder project\n"
+                HAS_CMD=1
+              fi
+              if [ "$DISCARD_ENABLED" = "true" ]; then
+                MSG+="/discardchanges — Batalkan perubahan file\n"
+                HAS_CMD=1
+              fi
+              if [ "$HAS_CMD" = "0" ]; then
+                MSG+="<i>Tidak ada perintah yang diaktifkan</i>\n"
+              fi
+              MSG+="\n<b>👁️ Fitur Otomatis:</b>\n"
+              if [ "$FILE_MONITOR_ENABLED" = "true" ]; then
+                MSG+="• File monitor — notifikasi realtime saat ada file berubah\n"
+              fi
+              if [ "$SSH_LOGIN_ENABLED" = "true" ] || [ "$SSH_LOGOUT_ENABLED" = "true" ] || [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] || [ "$SUDO_ENABLED" = "true" ]; then
+                MSG+="• Auth monitor — "
+                local ITEMS=""
+                [ "$SSH_LOGIN_ENABLED" = "true" ] && ITEMS+="login, "
+                [ "$SSH_LOGOUT_ENABLED" = "true" ] && ITEMS+="logout, "
+                [ "$SSH_FAILED_LOGIN_ENABLED" = "true" ] && ITEMS+="failed login, "
+                [ "$SUDO_ENABLED" = "true" ] && ITEMS+="sudo"
+                MSG+=$(echo "$ITEMS" | sed 's/, $//')
+                MSG+="\n"
+              fi
+              if [ "$AUTO_REPORT_ENABLED" = "true" ]; then
+                MSG+="• Laporan otomatis — status VPS setiap 3 jam\n"
+              fi
+              echo -e "$MSG"
+            }
 
       case "$TEXT" in
         "/start"|"/help")
@@ -607,7 +606,7 @@ do
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
             --data-urlencode text="$MESSAGE" \
-            --data-urlencode parse_mode="MarkdownV2" \
+            --data-urlencode parse_mode="HTML" \
             > /dev/null
           ;;
         "/status")
